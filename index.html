@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>五子棋</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+            background-image: none !important;
+        }
+
+        .scoreboard {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .board-container {
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 1 / 1;
+            position: relative;
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            grid-template-rows: repeat(15, 1fr);
+            gap: 0;
+            background-color: #e6b87d;
+            border: 2px solid #8b4513;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .grid-line {
+            position: absolute;
+            background-color: #000;
+        }
+
+        .grid-line.vertical {
+            width: 1px;
+            height: 100%;
+        }
+
+        .grid-line.horizontal {
+            width: 100%;
+            height: 1px;
+        }
+
+        .intersection {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .stone {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .stone.black {
+            background-color: #000;
+        }
+
+        .stone.white {
+            background-color: #fff;
+            border: 1px solid #ccc;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 400px) {
+            .scoreboard {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="scoreboard">
+        <div>黑方: <span id="black-wins">0</span> 胜</div>
+        <div>白方: <span id="white-wins">0</span> 胜</div>
+    </div>
+    
+    <div class="board-container">
+        <div id="board"></div>
+    </div>
+
+    <script>
+        // 游戏常量
+        const BOARD_SIZE = 15;
+        const BLACK = 'black';
+        const WHITE = 'white';
+        const EMPTY = null;
+
+        // 游戏状态
+        let board = [];
+        let currentPlayer = BLACK;
+        let gameOver = false;
+        let scores = {
+            black: 0,
+            white: 0
+        };
+
+        // DOM元素
+        const boardElement = document.getElementById('board');
+        const blackWinsElement = document.getElementById('black-wins');
+        const whiteWinsElement = document.getElementById('white-wins');
+
+        // 初始化游戏
+        function initGame() {
+            // 初始化棋盘数组
+            board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(EMPTY));
+            currentPlayer = BLACK;
+            gameOver = false;
+            
+            // 清空棋盘
+            boardElement.innerHTML = '';
+            
+            // 创建棋盘交叉点
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    const intersection = document.createElement('div');
+                    intersection.className = 'intersection';
+                    intersection.dataset.row = row;
+                    intersection.dataset.col = col;
+                    
+                    // 添加点击事件
+                    intersection.addEventListener('click', handleIntersectionClick);
+                    // 添加触摸事件
+                    intersection.addEventListener('touchstart', handleIntersectionTouch);
+                    
+                    boardElement.appendChild(intersection);
+                }
+            }
+            
+            // 绘制网格线
+            drawGridLines();
+        }
+
+        // 绘制网格线
+        function drawGridLines() {
+            const boardRect = boardElement.getBoundingClientRect();
+            const cellSize = boardRect.width / BOARD_SIZE;
+            
+            // 垂直网格线
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                const line = document.createElement('div');
+                line.className = 'grid-line vertical';
+                line.style.left = `${(i + 0.5) * cellSize}px`;
+                boardElement.appendChild(line);
+            }
+            
+            // 水平网格线
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                const line = document.createElement('div');
+                line.className = 'grid-line horizontal';
+                line.style.top = `${(i + 0.5) * cellSize}px`;
+                boardElement.appendChild(line);
+            }
+        }
+
+        // 处理交叉点点击
+        function handleIntersectionClick(e) {
+            if (gameOver) return;
+            
+            const row = parseInt(e.target.dataset.row);
+            const col = parseInt(e.target.dataset.col);
+            
+            if (row !== undefined && col !== undefined) {
+                placeStone(row, col);
+            }
+        }
+
+        // 处理交叉点触摸
+        function handleIntersectionTouch(e) {
+            e.preventDefault();
+            if (gameOver) return;
+            
+            const touch = e.touches[0];
+            const intersection = document.elementFromPoint(touch.clientX, touch.clientY);
+            
+            if (intersection && intersection.classList.contains('intersection')) {
+                const row = parseInt(intersection.dataset.row);
+                const col = parseInt(intersection.dataset.col);
+                
+                if (row !== undefined && col !== undefined) {
+                    placeStone(row, col);
+                }
+            }
+        }
+
+        // 落子
+        function placeStone(row, col) {
+            if (board[row][col] !== EMPTY) return;
+            
+            // 更新棋盘数组
+            board[row][col] = currentPlayer;
+            
+            // 创建棋子DOM元素
+            const stone = document.createElement('div');
+            stone.className = `stone ${currentPlayer}`;
+            
+            // 获取交叉点元素并添加棋子
+            const intersections = boardElement.querySelectorAll('.intersection');
+            const index = row * BOARD_SIZE + col;
+            intersections[index].appendChild(stone);
+            
+            // 检查胜负
+            if (checkWin(row, col)) {
+                gameOver = true;
+                
+                // 更新分数
+                scores[currentPlayer]++;
+                updateScoreboard();
+                
+                // 弹窗提示，确认后重新开始
+                const winner = currentPlayer === BLACK ? '黑方' : '白方';
+                const message = `${winner}获胜！是否开始新一局？`;
+                
+                // 确保弹窗在移动设备上正常显示
+                setTimeout(() => {
+                    try {
+                        if (confirm(message)) {
+                            initGame();
+                        }
+                    } catch (e) {
+                        // 如果confirm失败，使用alert替代
+                        alert(message + '\n游戏将在3秒后自动开始新一局');
+                        setTimeout(() => {
+                            initGame();
+                        }, 3000);
+                    }
+                }, 100);
+                return;
+            }
+            
+            // 检查平局
+            if (checkDraw()) {
+                gameOver = true;
+                
+                // 弹窗提示，确认后重新开始
+                const message = '平局！是否开始新一局？';
+                
+                // 确保弹窗在移动设备上正常显示
+                setTimeout(() => {
+                    try {
+                        if (confirm(message)) {
+                            initGame();
+                        }
+                    } catch (e) {
+                        // 如果confirm失败，使用alert替代
+                        alert(message + '\n游戏将在3秒后自动开始新一局');
+                        setTimeout(() => {
+                            initGame();
+                        }, 3000);
+                    }
+                }, 100);
+                return;
+            }
+            
+            // 切换玩家
+            currentPlayer = currentPlayer === BLACK ? WHITE : BLACK;
+        }
+
+        // 检查胜负
+        function checkWin(row, col) {
+            const directions = [
+                [0, 1],   // 水平
+                [1, 0],   // 垂直
+                [1, 1],   // 对角线
+                [1, -1]   // 反对角线
+            ];
+            
+            for (const [dx, dy] of directions) {
+                let count = 1;
+                
+                // 向正方向检查
+                for (let i = 1; i < 5; i++) {
+                    const newRow = row + dx * i;
+                    const newCol = col + dy * i;
+                    if (isValidPosition(newRow, newCol) && board[newRow][newCol] === currentPlayer) {
+                        count++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                // 向反方向检查
+                for (let i = 1; i < 5; i++) {
+                    const newRow = row - dx * i;
+                    const newCol = col - dy * i;
+                    if (isValidPosition(newRow, newCol) && board[newRow][newCol] === currentPlayer) {
+                        count++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (count >= 5) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // 检查位置是否有效
+        function isValidPosition(row, col) {
+            return row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE;
+        }
+
+        // 检查平局
+        function checkDraw() {
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (board[row][col] === EMPTY) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // 更新分数板
+        function updateScoreboard() {
+            blackWinsElement.textContent = scores.black;
+            whiteWinsElement.textContent = scores.white;
+        }
+
+        // 初始化游戏
+        initGame();
+    </script>
+</body>
+</html>
